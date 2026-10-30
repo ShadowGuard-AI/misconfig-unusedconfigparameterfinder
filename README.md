@@ -1,3 +1,5 @@
+![Banner](banner.png)
+
 # misconfig-UnusedConfigParameterFinder
 Identifies unused configuration parameters across multiple configuration files (e.g., YAML, JSON, INI). Helps reduce complexity and identify potential areas of improvement in configurations. Utilizes `pyyaml`, `json`, and `configparser` libraries. - Focused on Check for misconfigurations in configuration files or infrastructure definitions
 
