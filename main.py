@@ -91,6 +91,14 @@ def find_used_parameters(reference_files, check_comments=False):
                 else:
                     pattern = re.compile(r"(?<![a-zA-Z0-9_-])([a-zA-Z0-9_-]+)(?![a-zA-Z0-9_-])(?![\s#]*#)", re.MULTILINE) # Improved regex
 
+                # This collects every word token in the reference file, and
+                # the comparison later is a set difference against parameter
+                # names. A top level parameter is therefore used if its name
+                # appears as any word anywhere in the file, in prose, in a
+                # comment, in an unrelated identifier, and the comment flag
+                # below changes almost nothing, because tokens inside a
+                # comment match under both patterns: the extra lookahead
+                # only rejects a token sitting directly before a # sign.
                 matches = pattern.findall(content)
                 used_parameters.update(matches)
 
@@ -120,6 +128,11 @@ def looks_like_secret_value(value):
         float(text)
         return False
     except ValueError:
+        # float() accepts more than digits: a value spelled nan or
+        # inf, or in scientific notation, counts as a plain number
+        # here and can never warn, whatever the parameter is called.
+        # The rule is a rough filter to keep counts and ports quiet,
+        # and its edges are exactly float()'s edges.
         return True
 
 
@@ -161,15 +174,32 @@ def find_unused_parameters(config_files, exclude_parameters=None, check_comments
                     name = prefix + str(key)  # Keys are not always strings; convert, never crash
                     all_parameters.add(name)
                     parameter_values[name] = value
+                    # Only mappings are walked. Parameters inside a list of
+                    # entries never enter the collected set at all, so they are
+                    # neither reported unused nor counted in the total, and a
+                    # config whose parameters all live in lists analyses as a
+                    # file holding nothing.
                     collect_parameters(value, name + ".")  # Recursive call for nested dictionaries
 
         collect_parameters(config_data)
         total_parameters += len(all_parameters)
 
         if exclude_parameters:
+            # Exclusion compares the full dotted name, so excluding a
+            # section name leaves every parameter under it in the
+            # analysis, and the same reduced set is what the security
+            # check below reads, which means an excluded parameter also
+            # escapes the hardcoded secret warning entirely.
             excluded_set = set(exclude_parameters)
             all_parameters = all_parameters.difference(excluded_set)
 
+        # A nested parameter's full name contains a dot, and no token
+        # the search above produces can contain a dot, because dots
+        # are outside its character class. A parameter like
+        # database.port can therefore never be in the used set and
+        # is always reported unused, while its parent name, database,
+        # is judged on the bare word. Every nested leaf in my output
+        # carries that defect.
         unused = sorted(all_parameters.difference(used_parameters))
 
         if not disable_security_checks:
